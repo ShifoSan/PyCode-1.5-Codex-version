@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Pydroid-like Web IDE</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+  <style>
+    :root {
+      --bg: #000;
+      --topbar: #1a2a3a;
+      --text: #e8edf3;
+      --muted: #9bb0c4;
+      --fab: #ffd300;
+      --fab-icon: #fff;
+      --panel: #10151c;
+      --border: #2a3848;
+      --accent: #77b7ff;
+      --danger: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .app {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .topbar {
+      min-height: 56px;
+      padding: 8px 10px;
+      background: var(--topbar);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #223446;
+      position: relative;
+      z-index: 5;
+    }
+
+    .icon-btn {
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .filename {
+      font-size: 15px;
+      font-weight: 600;
+      margin-right: auto;
+      white-space: nowrap;
+    }
+
+    .api-key {
+      width: 34vw;
+      max-width: 170px;
+      min-width: 96px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0f1b27;
+      color: var(--text);
+      padding: 6px 8px;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .api-key:focus { border-color: var(--accent); }
+
+    .ai-btn {
+      border: 1px solid var(--border);
+      background: #22374b;
+      color: #dfefff;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .editor-wrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+
+    .CodeMirror {
+      height: 100% !important;
+      font-size: 15px;
+      line-height: 1.45;
+      background: #05070a;
+    }
+
+    .fab {
+      position: fixed;
+      right: 18px;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      border: none;
+      background: var(--fab);
+      color: var(--fab-icon);
+      font-size: 28px;
+      box-shadow: 0 8px 22px rgba(0,0,0,.45);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      z-index: 4;
+    }
+
+    .terminal {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      color: #e8f0ff;
+      display: none;
+      flex-direction: column;
+      z-index: 10;
+    }
+
+    .terminal.active { display: flex; }
+
+    .terminal-head {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border-bottom: 1px solid #1f2731;
+      background: #05070a;
+      gap: 8px;
+    }
+
+    .terminal-head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    #terminalOutput {
+      margin: 0;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.42;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow: auto;
+      flex: 1;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.58);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 20;
+    }
+
+    .modal-backdrop.active { display: flex; }
+
+    .modal {
+      width: min(540px, 100%);
+      max-height: 85vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .modal h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+
+    .status {
+      margin: 8px 0;
+      color: #bbd7ff;
+      font-weight: 700;
+    }
+
+    .explanation {
+      margin: 8px 0 12px;
+      color: #dce8f4;
+      font-size: 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .preview {
+      background: #0a1118;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 40vh;
+      overflow: auto;
+    }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .btn {
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: #1a2a3a;
+      border-radius: 8px;
+      font-size: 13px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .btn.primary { background: #2d5e91; border-color: #3a6997; }
+    .btn.warn { background: #50222a; border-color: #6f2b35; color: #ffd6dc; }
+
+    @media (max-width: 480px) {
+      .filename { display: none; }
+      .api-key { width: 42vw; }
+      .topbar { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="editorScreen">
+    <div class="topbar">
+      <button class="icon-btn" aria-label="menu">☰</button>
+      <div class="filename">new*</div>
+      <input id="apiKeyInput" class="api-key" type="password" placeholder="Gemini API Key" autocomplete="off" />
+      <button id="aiCheckBtn" class="ai-btn">✨ AI Check</button>
+    </div>
+    <div class="editor-wrap">
+      <textarea id="editor"></textarea>
+    </div>
+    <button id="runBtn" class="fab" aria-label="Run">▶</button>
+  </div>
+
+  <div id="terminalScreen" class="terminal" aria-live="polite">
+    <div class="terminal-head">
+      <button id="backBtn" class="btn">← Back</button>
+      <h3>Python Output</h3>
+    </div>
+    <pre id="terminalOutput"></pre>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <h2>AI Check</h2>
+      <div id="aiStatus" class="status"></div>
+      <div id="aiExplanation" class="explanation"></div>
+      <div id="fixPreview" class="preview" style="display:none"></div>
+      <div id="modalActions" class="actions"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  <script>
+    const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+      mode: 'python',
+      theme: 'material-darker',
+      lineNumbers: true,
+      indentUnit: 4,
+      tabSize: 4,
+      lineWrapping: false,
+      viewportMargin: Infinity,
+    });
+
+    editor.setValue(`print("Hello from Pyodide")\nname = input("Your name? ")\nprint(f"Hi, {name}!")`);
+
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const aiCheckBtn = document.getElementById('aiCheckBtn');
+    const runBtn = document.getElementById('runBtn');
+    const backBtn = document.getElementById('backBtn');
+    const terminalScreen = document.getElementById('terminalScreen');
+    const terminalOutput = document.getElementById('terminalOutput');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const aiStatus = document.getElementById('aiStatus');
+    const aiExplanation = document.getElementById('aiExplanation');
+    const modalActions = document.getElementById('modalActions');
+    const fixPreview = document.getElementById('fixPreview');
+
+    let pyodide;
+    let pyReady;
+    let sessionApiKey = sessionStorage.getItem('gemini_api_key') || '';
+
+    apiKeyInput.value = sessionApiKey;
+    apiKeyInput.addEventListener('input', () => {
+      sessionApiKey = apiKeyInput.value.trim();
+      if (sessionApiKey) {
+        sessionStorage.setItem('gemini_api_key', sessionApiKey);
+      } else {
+        sessionStorage.removeItem('gemini_api_key');
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      sessionStorage.removeItem('gemini_api_key');
+    });
+
+    async function getPyodide() {
+      if (!pyReady) {
+        pyReady = loadPyodide({ stdout: () => {}, stderr: () => {} }).then((instance) => {
+          pyodide = instance;
+          return pyodide;
+        });
+      }
+      return pyReady;
+    }
+
+    function showTerminal(text) {
+      terminalOutput.textContent = text;
+      terminalScreen.classList.add('active');
+    }
+
+    function appendTerminal(text) {
+      terminalOutput.textContent += text;
+    }
+
+    runBtn.addEventListener('click', async () => {
+      showTerminal('Running...\n');
+      const code = editor.getValue();
+      try {
+        const py = await getPyodide();
+        py.globals.set('js_prompt_input', (promptText) => window.prompt(promptText || 'Input required:', '') ?? '');
+        const wrappedCode = `
+import sys, io, traceback, builtins
+from js import js_prompt_input
+
+_out = io.StringIO()
+_old_out, _old_err = sys.stdout, sys.stderr
+_old_input = builtins.input
+sys.stdout = _out
+sys.stderr = _out
+builtins.input = lambda prompt='': js_prompt_input(prompt)
+
+try:
+${code.split('\n').map(line => '    ' + line).join('\n')}
+except Exception:
+    traceback.print_exc()
+finally:
+    builtins.input = _old_input
+    sys.stdout = _old_out
+    sys.stderr = _old_err
+
+result = _out.getvalue()
+`;
+
+        await py.runPythonAsync(wrappedCode);
+        const output = py.globals.get('result') || '';
+        terminalOutput.textContent = output || '[Program finished with no output]';
+      } catch (err) {
+        appendTerminal(`\nError:\n${err}`);
+      }
+    });
+
+    backBtn.addEventListener('click', () => {
+      terminalScreen.classList.remove('active');
+    });
+
+    function openModal() {
+      modalBackdrop.classList.add('active');
+    }
+
+    function closeModal() {
+      modalBackdrop.classList.remove('active');
+      fixPreview.style.display = 'none';
+      fixPreview.textContent = '';
+    }
+
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) closeModal();
+    });
+
+    function renderActions(actions) {
+      modalActions.innerHTML = '';
+      actions.forEach(({ text, className, onClick }) => {
+        const btn = document.createElement('button');
+        btn.className = `btn ${className || ''}`.trim();
+        btn.textContent = text;
+        btn.addEventListener('click', onClick);
+        modalActions.appendChild(btn);
+      });
+    }
+
+    function buildAiPrompt(code) {
+      return `Analyze this Python code for syntax and logical issues.
+Return strictly minified JSON with keys: status, explanation, fixedCode.
+status should be a short human phrase like "Looks good!" or "Found some bugs.".
+explanation should explain what is right/wrong and how to fix.
+fixedCode should contain corrected code (or same code if no changes needed).
+Python code:\n\n${code}`;
+    }
+
+    async function callGemini(apiKey, code) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: buildAiPrompt(code) }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini request failed (${res.status}): ${errText}`);
+      }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Could not parse AI response as JSON. Raw response:\n' + text);
+      }
+      return {
+        status: parsed.status || 'Analysis complete',
+        explanation: parsed.explanation || 'No explanation provided.',
+        fixedCode: parsed.fixedCode || code,
+      };
+    }
+
+    aiCheckBtn.addEventListener('click', async () => {
+      const apiKey = sessionApiKey || apiKeyInput.value.trim();
+      const currentCode = editor.getValue();
+
+      openModal();
+      aiStatus.textContent = 'Checking...';
+      aiExplanation.textContent = 'Sending code to Gemini for analysis.';
+      renderActions([{ text: 'Close', onClick: closeModal }]);
+
+      if (!apiKey) {
+        aiStatus.textContent = 'API key needed';
+        aiExplanation.textContent = 'Enter your Gemini API key in the top bar. The key stays only in this tab session and is wiped on refresh/close.';
+        return;
+      }
+
+      try {
+        const result = await callGemini(apiKey, currentCode);
+        aiStatus.textContent = `Status: ${result.status}`;
+        aiExplanation.textContent = result.explanation;
+
+        renderActions([
+          {
+            text: 'Let AI Fix It',
+            className: 'primary',
+            onClick: () => {
+              fixPreview.style.display = 'block';
+              fixPreview.textContent = result.fixedCode;
+              aiStatus.textContent = 'Preview AI-fixed code';
+              aiExplanation.textContent = 'Review the suggested code below. Accept to apply it to the editor.';
+              renderActions([
+                {
+                  text: 'Accept',
+                  className: 'primary',
+                  onClick: () => {
+                    editor.setValue(result.fixedCode);
+                    closeModal();
+                  }
+                },
+                { text: 'Cancel', className: 'warn', onClick: closeModal }
+              ]);
+            }
+          },
+          { text: 'Close', onClick: closeModal }
+        ]);
+      } catch (err) {
+        aiStatus.textContent = 'AI Check failed';
+        aiExplanation.textContent = String(err);
+        renderActions([{ text: 'Close', className: 'warn', onClick: closeModal }]);
+      }
+    });
+  </script>
+</body>
+</html>
